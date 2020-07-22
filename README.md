@@ -1,4 +1,4 @@
-# nrf24-multipro
+# nrf24-multipro-for-Devo-7-not-7e-
 nRF24L01 multi-protocol RC transmitter
 
 ## Can be used with Arduino Nano(3) and Devo 7 (not 7e)
