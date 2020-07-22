@@ -9,6 +9,7 @@ nRF24L01 multi-protocol RC transmitter
 
 ## Binding Procedure
 - Create a model in OpenTX using external module in PPM mode, 12 channels and TAER sequence order.
+- Custom to use with Devo 7
 - Turn off Taranis.
 - Power up quad.
 - While holding the appropriate stick pattern listed below, power up Taranis.
