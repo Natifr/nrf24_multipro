@@ -62,26 +62,27 @@
 // PPM stream settings
 #define CHANNELS 12 // number of channels in ppm stream, 12 ideally
 enum chan_order{
-    THROTTLE,
-    AILERON,
-    ELEVATOR,
-    RUDDER,
     AUX1,  // (CH5)  led light, or 3 pos. rate on CX-10, H7, or inverted flight on H101
-    AUX2,  // (CH6)  flip control
-    AUX3,  // (CH7)  still camera (snapshot)
+    ELEVATOR,
     AUX4,  // (CH8)  video camera
+    AILERON,
+    AUX2,  // (CH6)  flip control
+    THROTTLE,
+    AUX3,  // (CH7)  still camera (snapshot)
+    RUDDER,
     AUX5,  // (CH9)  headless
+    AUX8,  // (CH12) Reset / Rebind
     AUX6,  // (CH10) calibrate Y (V2x2), pitch trim (H7), RTH (Bayang, H20), 360deg flip mode (H8-3D, H22)
     AUX7,  // (CH11) calibrate X (V2x2), roll trim (H7), emergency stop (Bayang, Silverware)
-    AUX8,  // (CH12) Reset / Rebind
+   
 };
 
-#define PPM_MIN 1000
-#define PPM_SAFE_THROTTLE 1050 
+#define PPM_MIN 1080
+#define PPM_SAFE_THROTTLE 1150
 #define PPM_MID 1500
-#define PPM_MAX 2000
-#define PPM_MIN_COMMAND 1300
-#define PPM_MAX_COMMAND 1700
+#define PPM_MAX 1920
+#define PPM_MIN_COMMAND 1250
+#define PPM_MAX_COMMAND 1750
 #define GET_FLAG(ch, mask) (ppm[ch] > PPM_MAX_COMMAND ? mask : 0)
 #define GET_FLAG_INV(ch, mask) (ppm[ch] < PPM_MIN_COMMAND ? mask : 0)
 
@@ -144,18 +145,23 @@ void setup()
     pinMode(CE_pin, OUTPUT);
     pinMode(MISO_pin, INPUT);
     frskyInit();
+
     
-    // PPM ISR setup
-    attachInterrupt(digitalPinToInterrupt(PPM_pin), ISR_ppm, CHANGE);
     TCCR1A = 0;  //reset timer1
     TCCR1B = 0;
     TCCR1B |= (1 << CS11);  //set timer1 to increment every 1 us @ 8MHz, 0.5 us @16MHz
 
+    
+    // PPM ISR setup
+    attachInterrupt(digitalPinToInterrupt(PPM_pin), ISR_ppm, CHANGE);
+    
+ //  Serial.begin(115200);
     set_txid(false);
 }
 
 void loop()
 {
+//Serial.println(Servo_data[0]);  
     uint32_t timeout=0;
     // reset / rebind
     if(reset || ppm[AUX8] > PPM_MAX_COMMAND) {
@@ -296,11 +302,11 @@ void selectProtocol()
         current_protocol = PROTO_SYMAX5C1; // Syma X5C-1, X11, X11C, X12
     
     // Elevator up + Aileron right
-    else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND)
+    else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND) {
         current_protocol = PROTO_BAYANG;    // EAchine H8(C) mini, BayangToys X6/X7/X9, JJRC JJ850 ...
-    
+    //Serial.println("PROTO_BAYANG");
     // Elevator up + Aileron left
-    else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND) 
+    } else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND) 
         current_protocol = PROTO_H7;        // EAchine H7, MT99xx
     
     // Elevator up  
@@ -389,11 +395,14 @@ void init_protocol()
 // update ppm values out of ISR    
 void update_ppm()
 {
+    
     for(uint8_t ch=0; ch<CHANNELS; ch++) {
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
             ppm[ch] = Servo_data[ch];
+        // Serial.print(ch) ; Serial.print(" <> ");  Serial.print(ppm[ch]) ; Serial.print(" <> "); 
         }
     }
+  // Serial.println("");
 #ifdef SPEKTRUM
     for(uint8_t ch=0; ch<CHANNELS; ch++) {
         if(ch == AILERON || ch == RUDDER) {
@@ -402,6 +411,20 @@ void update_ppm()
         ppm[ch] = constrain(map(ppm[ch],1120,1880,PPM_MIN,PPM_MAX),PPM_MIN,PPM_MAX);
     }
 #endif
+}
+
+// Some adjustments I used because my cheapass TX has no trims.
+// If your TX has trims you will not need this and you can simply
+// return the 'diff' value unchanged.
+uint16_t adjust(uint16_t diff, uint8_t chan) {
+  switch (chan) { 
+    case THROTTLE: return (diff+400); // chan 5 (left up/down) // min 700 mx 1500
+    case AILERON:  return (2800 - (diff+192)) ; // chan 3 (right left/right) // min 708 max 1508
+    case ELEVATOR: return (diff+400); // chan 1 (right up/down) // min 700 mx 1500
+    case RUDDER:   return (2800 - (diff+176)); // chan 7 (left left/right) // min 724 max 1524
+  }
+  
+  return diff+400 ;
 }
 
 void ISR_ppm()
@@ -416,21 +439,24 @@ void ISR_ppm()
     static unsigned int pulse;
     static unsigned long counterPPM;
     static byte chan;
-    counterPPM = TCNT1;
-    TCNT1 = 0;
+    uint16_t now,diff;
+    static uint16_t last = 0;
+    
+    now = micros();
+    sei();
+    diff = now - last;
+    last = now;
     ppm_ok=false;
-    if(counterPPM < 510 << PPM_SCALE) {  //must be a pulse if less than 510us
-        pulse = counterPPM;
+    if(diff>3000 || chan >= CHANNELS) chan = 0;
+  else {
+    if(500<diff && diff<2200) {
+      Servo_data[chan] = adjust(diff,chan);
+      if(chan>3) ppm_ok = true; // 4 first channels Ok;
     }
-    else if(counterPPM > 1910 << PPM_SCALE) {  //sync pulses over 1910us
-        chan = 0;
-    }
-    else{  //servo values between 510us and 2420us will end up here
-        if(chan < CHANNELS) {
-            Servo_data[chan]= constrain((counterPPM + pulse) >> PPM_SCALE, PPM_MIN, PPM_MAX);
-            if(chan==3)
-                ppm_ok = true; // 4 first channels Ok
-        }
-        chan++;
-    }
+    ++chan;
+  }
+  
+   
+               
+       
 }
