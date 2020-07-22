@@ -1,8 +1,7 @@
 # nrf24-multipro
 nRF24L01 multi-protocol RC transmitter
 
-![Screenshot](http://i.imgur.com/AeMJKzT.jpg)  
-[Need a module ?](mailto:goebish@gmail.com?Subject=nrf24-multipro%20module)
+## Can be used with Arduino Nano(3) and Devo 7 (not 7e)
 
 ## Current build status
 [![Build Status](https://travis-ci.org/goebish/nrf24_multipro.svg?branch=master)](https://travis-ci.org/goebish/nrf24_multipro?branch=master)
