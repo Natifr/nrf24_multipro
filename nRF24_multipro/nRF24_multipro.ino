@@ -62,16 +62,16 @@
 // PPM stream settings
 #define CHANNELS 12 // number of channels in ppm stream, 12 ideally
 enum chan_order{
-    AUX1,  // (CH5)  led light, or 3 pos. rate on CX-10, H7, or inverted flight on H101
     ELEVATOR,
-    AUX4,  // (CH8)  video camera
     AILERON,
-    AUX2,  // (CH6)  flip control
     THROTTLE,
-    AUX3,  // (CH7)  still camera (snapshot)
     RUDDER,
-    AUX5,  // (CH9)  headless
     AUX8,  // (CH12) Reset / Rebind
+    AUX1,  // (CH5)  led light, or 3 pos. rate on CX-10, H7, or inverted flight on H101
+    AUX2,  // (CH6)  flip control
+    AUX3,  // (CH7)  still camera (snapshot)
+    AUX4,  // (CH8)  video camera
+    AUX5,  // (CH9)  headless
     AUX6,  // (CH10) calibrate Y (V2x2), pitch trim (H7), RTH (Bayang, H20), 360deg flip mode (H8-3D, H22)
     AUX7,  // (CH11) calibrate X (V2x2), roll trim (H7), emergency stop (Bayang, Silverware)
    
@@ -133,12 +133,18 @@ volatile uint16_t Servo_data[12];
 static uint16_t ppm[12] = {PPM_MIN,PPM_MIN,PPM_MIN,PPM_MIN,PPM_MID,PPM_MID,
                            PPM_MID,PPM_MID,PPM_MID,PPM_MID,PPM_MID,PPM_MID,};
 
+
+#define RC_CHANS 6
+volatile uint16_t rcValue[12] = {1502, 1502, 1502, 1502, 1502, 1502};
+
+
+
 void setup()
 {
     randomSeed((analogRead(A4) & 0x1F) | (analogRead(A5) << 5));
     pinMode(ledPin, OUTPUT);
     digitalWrite(ledPin, LOW); //start LED off
-    pinMode(PPM_pin, INPUT);
+  //  pinMode(PPM_pin, INPUT);
     pinMode(MOSI_pin, OUTPUT);
     pinMode(SCK_pin, OUTPUT);
     pinMode(CS_pin, OUTPUT);
@@ -146,16 +152,11 @@ void setup()
     pinMode(MISO_pin, INPUT);
     frskyInit();
 
-    
-    TCCR1A = 0;  //reset timer1
-    TCCR1B = 0;
-    TCCR1B |= (1 << CS11);  //set timer1 to increment every 1 us @ 8MHz, 0.5 us @16MHz
 
-    
     // PPM ISR setup
-    attachInterrupt(digitalPinToInterrupt(PPM_pin), ISR_ppm, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PPM_pin), rxInt, RISING);
     
- //  Serial.begin(115200);
+   Serial.begin(115200);
     set_txid(false);
 }
 
@@ -396,13 +397,13 @@ void init_protocol()
 void update_ppm()
 {
     
-    for(uint8_t ch=0; ch<CHANNELS; ch++) {
-        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-            ppm[ch] = Servo_data[ch];
-        // Serial.print(ch) ; Serial.print(" <> ");  Serial.print(ppm[ch]) ; Serial.print(" <> "); 
-        }
+    for(uint8_t ch=0; ch<RC_CHANS; ch++) {
+       // ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+            ppm[ch] = rcValue[ch];
+         Serial.print(ch) ; Serial.print(" <> ");  Serial.print(ppm[ch]) ; Serial.print(" <> "); 
+        //}
     }
-  // Serial.println("");
+  Serial.println("");
 #ifdef SPEKTRUM
     for(uint8_t ch=0; ch<CHANNELS; ch++) {
         if(ch == AILERON || ch == RUDDER) {
@@ -417,46 +418,35 @@ void update_ppm()
 // If your TX has trims you will not need this and you can simply
 // return the 'diff' value unchanged.
 uint16_t adjust(uint16_t diff, uint8_t chan) {
+ 
   switch (chan) { 
-    case THROTTLE: return (diff+400); // chan 5 (left up/down) // min 700 mx 1500
-    case AILERON:  return (2800 - (diff+192)) ; // chan 3 (right left/right) // min 708 max 1508
-    case ELEVATOR: return (diff+400); // chan 1 (right up/down) // min 700 mx 1500
-    case RUDDER:   return (2800 - (diff+176)); // chan 7 (left left/right) // min 724 max 1524
+   case ELEVATOR: return diff; //  (right up/down) // min 700 mx 1500
+    case AILERON:  return (3100 -diff) ; // (right left/right) // min 708 max 1508
+     case THROTTLE: return diff; // (left up/down) 
+     case RUDDER:   return (3000 - diff);  //(left left/right) // min 724 max 1524
   }
   
-  return diff+400 ;
+  return diff ;
 }
 
-void ISR_ppm()
-{
-    #if F_CPU == 16000000
-        #define PPM_SCALE 1L
-    #elif F_CPU == 8000000
-        #define PPM_SCALE 0L
-    #else
-        #error // 8 or 16MHz only !
-    #endif
-    static unsigned int pulse;
-    static unsigned long counterPPM;
-    static byte chan;
-    uint16_t now,diff;
-    static uint16_t last = 0;
-    
-    now = micros();
-    sei();
-    diff = now - last;
-    last = now;
-    ppm_ok=false;
-    if(diff>3000 || chan >= CHANNELS) chan = 0;
+
+
+// PPM interrupt routine courtesy of MultiWii source code
+void rxInt(void) {
+  uint16_t now,diff;
+  static uint16_t last = 0;
+  static uint8_t chan = 0;
+  now = micros();
+  sei();
+  diff = now - last;
+  last = now;
+  ppm_ok = false;
+  if(diff>3000 || chan >= RC_CHANS) chan = 0;
   else {
-    if(500<diff && diff<2200) {
-      Servo_data[chan] = adjust(diff,chan);
-      if(chan>3) ppm_ok = true; // 4 first channels Ok;
+    if(900<diff && diff<2200) {
+      rcValue[chan] = adjust(diff,chan);
+        if(chan>3) ppm_ok = true; // 4 first channels Ok;
     }
     ++chan;
   }
-  
-   
-               
-       
 }
