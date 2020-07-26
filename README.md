@@ -1,7 +1,13 @@
 # nrf24-multipro-for-Devo-7-not-7e-
 nRF24L01 multi-protocol RC transmitter
 
+
+![Picture](https://static.rcgroups.net/forums/attachments/8/4/2/9/2/9/a13853433-62-PHOTO-2020-07-25-23-21-29_1.jpg)
+
 ## Can be used with Arduino Nano(3) and Devo 7 (not 7e)
+
+more details and pictures:
+https://www.rcgroups.com/forums/showthread.php?3667215-Devo-7-%28or-other-PPM-RC%29-forked-the-nrf24-multipro-by-goebish
 
 ## Current build status
 [![Build Status](https://travis-ci.org/goebish/nrf24_multipro.svg?branch=master)](https://travis-ci.org/goebish/nrf24_multipro?branch=master)
