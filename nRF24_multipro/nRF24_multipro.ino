@@ -134,8 +134,8 @@ static uint16_t ppm[12] = {PPM_MIN,PPM_MIN,PPM_MIN,PPM_MIN,PPM_MID,PPM_MID,
                            PPM_MID,PPM_MID,PPM_MID,PPM_MID,PPM_MID,PPM_MID,};
 
 
-#define RC_CHANS 6
-volatile uint16_t rcValue[12] = {1502, 1502, 1502, 1502, 1502, 1502};
+#define RC_CHANS 7
+volatile uint16_t rcValue[12] = {1502, 1502, 1502, 1502, 1502, 1502, 1502};
 
 
 
